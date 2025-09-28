@@ -8,11 +8,13 @@ import { UploadIcon, DownloadIcon } from './Icons';
 interface GeneratorProps {
   user: User | null;
   onGenerate: () => void;
+  anonymousGenerationsLeft: number;
+  onAnonymousGenerate: () => void;
 }
 
 type Status = 'idle' | 'uploading' | 'generating' | 'success' | 'error';
 
-export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
+export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate, anonymousGenerationsLeft, onAnonymousGenerate }) => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>('idle');
@@ -40,13 +42,17 @@ export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
       setError('Please select an image first.');
       return;
     }
-    if (!user) {
-        setError('Please sign in to generate an image.');
+
+    if (user) {
+      if (user.generationsLeft <= 0) {
+        setError('You have no generations left this month. Please upgrade your plan.');
         return;
-    }
-    if (user.generationsLeft <= 0) {
-      setError('You have no generations left this month. Please upgrade your plan.');
-      return;
+      }
+    } else { // Guest user
+      if (anonymousGenerationsLeft <= 0) {
+        setError('You have used all your free generations. Please sign in to continue.');
+        return;
+      }
     }
 
     setStatus('generating');
@@ -58,7 +64,12 @@ export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
       const resultBase64 = await generateImageWithJesus(base64Image, file.type);
       setGeneratedImage(`data:image/png;base64,${resultBase64}`);
       setStatus('success');
-      onGenerate();
+      
+      if (user) {
+        onGenerate();
+      } else {
+        onAnonymousGenerate();
+      }
     } catch (err) {
       setStatus('error');
       setError((err as Error).message || 'An unknown error occurred.');
@@ -77,8 +88,8 @@ export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
   };
 
   const isFreeTier = !user || user.tier.id === 'free';
-  // FIX: Refined canGenerate logic to only include states where the generate button is intended to be active.
-  const canGenerate = user && user.generationsLeft > 0 && file && (status === 'idle' || status === 'error');
+  const canGenerate = file && (status === 'idle' || status === 'error') &&
+    ((user && user.generationsLeft > 0) || (!user && anonymousGenerationsLeft > 0));
 
   return (
     <section id="generator" className="py-12 px-4">
@@ -123,7 +134,7 @@ export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
                   <img src={generatedImage} alt="AI generated art" className="max-w-full max-h-full object-contain" />
                   {isFreeTier && (
                       <div className="absolute bottom-2 inset-x-0 text-center text-white/50 font-semibold tracking-widest text-lg pointer-events-none">
-                          touchfeets.com
+                          www.touchfeets.com
                       </div>
                   )}
                 </>
@@ -143,7 +154,6 @@ export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
             ) : (
                 <button
                     onClick={handleGenerate}
-                    // FIX: Simplified disabled logic to fix the comparison error.
                     disabled={!canGenerate}
                     className="w-full bg-red-600 hover:bg-red-500 disabled:bg-red-900/50 disabled:cursor-not-allowed disabled:text-gray-500 text-white rounded-md px-4 py-3 text-lg font-bold transition-all duration-300 shadow-lg shadow-red-500/30"
                 >
@@ -157,7 +167,7 @@ export const Generator: React.FC<GeneratorProps> = ({ user, onGenerate }) => {
             {user ? (
                 <p>You have <span className="font-bold text-red-400">{user.generationsLeft}</span> generations left this month.</p>
             ) : (
-                <p>Please sign in to begin your sacred creations.</p>
+                <p>As a guest, you have <span className="font-bold text-red-400">{anonymousGenerationsLeft}</span> free generations left this month.</p>
             )}
             {error && <p className="mt-2 text-yellow-400">{error}</p>}
         </div>

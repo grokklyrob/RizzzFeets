@@ -14,6 +14,31 @@ const App: React.FC = () => {
     const savedUser = localStorage.getItem('touchfeets_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
+  
+  const [anonymousGenerations, setAnonymousGenerations] = useState<{ count: number; month: string }>(() => {
+    const saved = localStorage.getItem('touchfeets_anon_generations');
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
+
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        // Reset if the month has changed
+        if (data.month === currentMonth) {
+          return data;
+        }
+      } catch (e) {
+        // If parsing fails, reset to default
+        console.error("Could not parse anonymous generations data, resetting.", e);
+      }
+    }
+    // Default or reset value
+    return { count: 5, month: currentMonth };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('touchfeets_anon_generations', JSON.stringify(anonymousGenerations));
+  }, [anonymousGenerations]);
+
 
   useEffect(() => {
     if (user) {
@@ -75,6 +100,13 @@ const App: React.FC = () => {
     });
   }, []);
   
+  const decrementAnonymousGenerations = useCallback(() => {
+    setAnonymousGenerations(prev => {
+        if (prev.count <= 0) return prev;
+        return { ...prev, count: prev.count - 1 };
+    });
+  }, []);
+
   const handleSyncPlan = useCallback(async () => {
     if (!user) {
       console.warn("Sync attempted without a logged-in user.");
@@ -151,7 +183,12 @@ const App: React.FC = () => {
         <Header user={user} onSignOut={handleSignOut} onAuthSuccess={handleAuthSuccess} onSyncPlan={handleSyncPlan} />
         <main>
           <Hero />
-          <Generator user={user} onGenerate={decrementGenerations} />
+          <Generator 
+            user={user} 
+            onGenerate={decrementGenerations} 
+            anonymousGenerationsLeft={anonymousGenerations.count}
+            onAnonymousGenerate={decrementAnonymousGenerations}
+          />
           <Pricing onUpgrade={handleUpgrade} />
         </main>
         <Footer />
