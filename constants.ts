@@ -17,6 +17,14 @@ export const CREATE_CHECKOUT_SESSION_URL = 'https://us-central1-touchfeets.cloud
 // =======================================================================================
 export const CREATE_PORTAL_SESSION_URL = 'https://us-central1-touchfeets.cloudfunctions.net/createStripePortalSession';
 
+// FIX: Added missing export for GET_SUBSCRIPTION_STATUS_URL to fix import error.
+// =======================================================================================
+// CRITICAL CONFIGURATION: SYNC SUBSCRIPTION
+// You MUST replace this placeholder URL with the URL of your deployed backend function
+// that retrieves a user's current subscription status from Stripe.
+// =======================================================================================
+export const GET_SUBSCRIPTION_STATUS_URL = 'https://us-central1-touchfeets.cloudfunctions.net/getSubscriptionStatus';
+
 
 export const Tiers: { [key: string]: SubscriptionTier } = {
   FREE: {

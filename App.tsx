@@ -7,7 +7,7 @@ import { Footer } from './components/Footer';
 import { DigitalIncense } from './components/DigitalIncense';
 import type { User, SubscriptionTier, GoogleJwtPayload } from './types';
 import { Tiers } from './constants';
-import { redirectToCheckout } from './services/stripeService';
+import { redirectToCheckout, syncSubscriptionStatus } from './services/stripeService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -58,8 +58,6 @@ const App: React.FC = () => {
           return;
       }
       try {
-        // Store the tier the user is trying to purchase before redirecting
-        localStorage.setItem('touchfeets_upgrade_tier', JSON.stringify(tier));
         await redirectToCheckout(tier.priceId, user.email);
       } catch (error) {
         console.error("Stripe Checkout Error:", error);
@@ -77,42 +75,80 @@ const App: React.FC = () => {
     });
   }, []);
   
-  // Effect to handle redirect from Stripe checkout
-  useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    if (query.get("checkout_success")) {
-      console.log("Order placed! You will receive an email confirmation.");
-      // In a real application, a backend webhook is the reliable way to update entitlements.
-      // For this demo, we simulate the upgrade on the client-side after redirect.
-      const upgradingUser = user;
-      const targetTier = localStorage.getItem('touchfeets_upgrade_tier');
-
-      if (upgradingUser && targetTier) {
-        const tier = JSON.parse(targetTier) as SubscriptionTier;
-        setUser({
-          ...upgradingUser,
-          tier: tier,
-          generationsLeft: upgradingUser.generationsLeft + tier.generations,
-        });
-        localStorage.removeItem('touchfeets_upgrade_tier');
-        // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+  const handleSyncPlan = useCallback(async () => {
+    if (!user) {
+      console.warn("Sync attempted without a logged-in user.");
+      throw new Error("You must be signed in to sync your plan.");
     }
 
-    if (query.get("checkout_canceled")) {
-      console.log("Order canceled -- continue to shop around and checkout when you're ready.");
+    try {
+      const activeTierId = await syncSubscriptionStatus(user.email);
+      const newTier = Object.values(Tiers).find(t => t.id === activeTierId);
+      
+      if (newTier) {
+        const hasTierChanged = user.tier.id !== newTier.id;
+
+        setUser(prevUser => {
+          if (!prevUser) return null;
+          
+          const updatedUser = {
+            ...prevUser,
+            tier: newTier,
+            // If the tier has changed, reset generations to the new tier's monthly amount.
+            // If not, leave the current count as is.
+            generationsLeft: hasTierChanged ? newTier.generations : prevUser.generationsLeft,
+          };
+          localStorage.setItem(`user_${updatedUser.googleId}`, JSON.stringify(updatedUser));
+          return updatedUser;
+        });
+
+        if (hasTierChanged) {
+            alert(`Your plan has been updated to ${newTier.name}!`);
+        } else {
+            alert('Your plan is up to date.');
+        }
+
+      } else {
+        throw new Error(`Unknown tier ID received from server: ${activeTierId}`);
+      }
+    } catch (error) {
+        console.error("Failed to sync plan:", error);
+        alert(`Failed to sync your plan: ${(error as Error).message}`);
+        // Re-throw so the UI can know the sync failed
+        throw error;
+    }
+  }, [user]);
+
+  // Effect to handle redirect from Stripe checkout - NOW IMPROVED
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const wasSuccess = query.get("checkout_success");
+    const wasCanceled = query.get("checkout_canceled");
+
+    if (wasSuccess && user) {
+      console.log("Checkout successful! Syncing your new plan...");
+      // Instead of relying on insecure client-side logic, we ask the backend for the source of truth.
+      handleSyncPlan().catch(err => {
+        // The error is already alerted inside handleSyncPlan, but we log it here too.
+        console.error("Post-checkout sync failed:", err);
+      }); 
+      localStorage.removeItem('touchfeets_upgrade_tier'); // Clean up old item just in case
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    if (wasCanceled) {
+      console.log("Order canceled.");
        localStorage.removeItem('touchfeets_upgrade_tier');
        window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [user]);
+  }, [user, handleSyncPlan]);
 
 
   return (
     <div className="relative min-h-screen bg-black text-gray-200 overflow-hidden">
       <DigitalIncense />
       <div className="relative z-10">
-        <Header user={user} onSignOut={handleSignOut} onAuthSuccess={handleAuthSuccess} />
+        <Header user={user} onSignOut={handleSignOut} onAuthSuccess={handleAuthSuccess} onSyncPlan={handleSyncPlan} />
         <main>
           <Hero />
           <Generator user={user} onGenerate={decrementGenerations} />

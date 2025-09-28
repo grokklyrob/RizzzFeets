@@ -1,5 +1,5 @@
 import { loadStripe } from '@stripe/stripe-js';
-import { STRIPE_PUBLISHABLE_KEY, CREATE_CHECKOUT_SESSION_URL, CREATE_PORTAL_SESSION_URL } from '../constants';
+import { STRIPE_PUBLISHABLE_KEY, CREATE_CHECKOUT_SESSION_URL, CREATE_PORTAL_SESSION_URL, GET_SUBSCRIPTION_STATUS_URL } from '../constants';
 
 // This is a singleton promise to load Stripe.js once.
 const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
@@ -125,4 +125,36 @@ export const redirectToBillingPortal = async (userEmail: string) => {
     } else {
       throw new Error('Billing portal URL not received from server.');
     }
+};
+
+/**
+ * Calls the backend to get the user's current subscription tier from Stripe.
+ * @param userEmail The email of the user to look up.
+ * @returns The tier ID ('free', 'basic', 'plus', 'pro') of the user's active subscription.
+ */
+export const syncSubscriptionStatus = async (userEmail: string): Promise<string> => {
+    if (GET_SUBSCRIPTION_STATUS_URL.includes('your-region-your-project')) {
+        const errorMessage = "Cannot sync plan. The backend URL for fetching subscription status is a placeholder. Please update `GET_SUBSCRIPTION_STATUS_URL` in `src/constants.ts`.";
+        console.error(errorMessage);
+        throw new Error("Backend URL for sync not configured.");
+    }
+
+    const response = await fetch(GET_SUBSCRIPTION_STATUS_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userEmail }),
+    });
+
+    if (!response.ok) {
+        throw await handleBackendError(response, 'Could not sync subscription status.');
+    }
+
+    const { tierId } = await response.json();
+    if (typeof tierId !== 'string') {
+        throw new Error('Invalid response from subscription sync server.');
+    }
+
+    return tierId;
 };

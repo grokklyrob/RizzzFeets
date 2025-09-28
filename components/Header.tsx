@@ -11,10 +11,12 @@ interface HeaderProps {
     user: User | null;
     onSignOut: () => void;
     onAuthSuccess: (payload: GoogleJwtPayload) => void;
+    onSyncPlan: () => Promise<void>;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onSignOut, onAuthSuccess }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onSignOut, onAuthSuccess, onSyncPlan }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const tokenClient = useRef<any>(null);
 
@@ -77,14 +79,12 @@ export const Header: React.FC<HeaderProps> = ({ user, onSignOut, onAuthSuccess }
         }
     };
 
-    const handleSignOutClick = (e: React.MouseEvent) => {
-        e.preventDefault();
+    const handleSignOutClick = () => {
         setIsDropdownOpen(false);
         onSignOut();
     };
 
-    const handlePortalClick = async (e: React.MouseEvent) => {
-        e.preventDefault();
+    const handlePortalClick = async () => {
         if (!user) {
             alert("Please sign in to manage your account.");
             return;
@@ -94,6 +94,21 @@ export const Header: React.FC<HeaderProps> = ({ user, onSignOut, onAuthSuccess }
         } catch (error) {
             console.error("Billing Portal Error:", error);
             alert(`Failed to open billing portal: ${(error as Error).message}`);
+        }
+    };
+
+    const handleSyncClick = async () => {
+        if (isSyncing) return;
+        console.log("Attempting to sync plan...");
+        setIsSyncing(true);
+        try {
+            await onSyncPlan();
+        } catch (error) {
+            // Error is already alerted in the parent component (App.tsx).
+            console.error("Sync failed in header:", error);
+        } finally {
+            setIsSyncing(false);
+            // Don't close dropdown on success, user might want to see updated plan name
         }
     };
 
@@ -110,36 +125,37 @@ export const Header: React.FC<HeaderProps> = ({ user, onSignOut, onAuthSuccess }
                 {user ? (
                     <div className="flex items-center space-x-2 sm:space-x-4">
                         <div className="border border-red-700/60 bg-red-900/20 text-red-300 rounded-full px-4 py-1.5 text-sm font-medium">
-                            {user.generationsLeft} Free Uses Left
+                            {user.generationsLeft} Uses Left
                         </div>
                         <div className="relative" ref={dropdownRef}>
                             <button
                                 onClick={() => setIsDropdownOpen(prev => !prev)}
                                 className="flex items-center space-x-1.5 text-gray-200 bg-gray-800/50 border border-gray-600 rounded-md px-3 py-1.5 text-sm font-medium hover:bg-gray-700/70 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
+                                aria-haspopup="true"
+                                aria-expanded={isDropdownOpen}
                             >
                                 <span>Account</span>
                                 <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {isDropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-60 bg-[#1A1A1A] border border-gray-700 rounded-lg shadow-xl origin-top-right z-20">
+                                <div className="absolute right-0 mt-2 w-60 bg-[#1A1A1A] border border-gray-700 rounded-lg shadow-xl origin-top-right z-20" role="menu">
                                     <div className="p-2 space-y-1">
                                         <div className="px-2 py-2 border-b border-gray-700">
                                             <p className="text-sm font-medium text-white truncate">{user.tier.name} Plan</p>
                                         </div>
-                                        {/* Placeholder links. In a real app, these would navigate to pages or trigger actions. */}
-                                        <a href="#" onClick={handlePortalClick} className="flex items-center w-full text-left px-2 py-2 text-sm text-gray-300 hover:bg-gray-700/50 rounded-md transition-colors">
+                                        <button type="button" onClick={handlePortalClick} className="flex items-center w-full text-left px-2 py-2 text-sm text-gray-300 hover:bg-gray-700/50 rounded-md transition-colors" role="menuitem">
                                             <SettingsIcon className="w-4 h-4 mr-3 text-gray-400" />
                                             Manage Subscription
-                                        </a>
-                                        <a href="#" className="flex items-center w-full text-left px-2 py-2 text-sm text-gray-300 hover:bg-gray-700/50 rounded-md transition-colors">
-                                            <SyncIcon className="w-4 h-4 mr-3 text-gray-400" />
-                                            Sync My Plan
-                                        </a>
+                                        </button>
+                                        <button type="button" onClick={handleSyncClick} disabled={isSyncing} className="flex items-center w-full text-left px-2 py-2 text-sm text-gray-300 hover:bg-gray-700/50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-wait" role="menuitem">
+                                            <SyncIcon className={`w-4 h-4 mr-3 text-gray-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                                            {isSyncing ? 'Syncing...' : 'Sync My Plan'}
+                                        </button>
                                         <div className="!mt-2 pt-2 border-t border-gray-700">
-                                            <a href="#" onClick={handleSignOutClick} className="flex items-center w-full text-left px-2 py-2 text-sm text-red-400 hover:bg-red-900/40 rounded-md transition-colors">
+                                            <button type="button" onClick={handleSignOutClick} className="flex items-center w-full text-left px-2 py-2 text-sm text-red-400 hover:bg-red-900/40 rounded-md transition-colors" role="menuitem">
                                                 <SignOutIcon className="w-4 h-4 mr-3" />
                                                 Sign Out
-                                            </a>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
