@@ -9,7 +9,7 @@ export const Hero: React.FC = () => {
           Let the Savior Touch Your Soles
         </h2>
         <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
-          Upload a photo of a person with bare feet and witness a moment of grace.
+          Upload a photo of a person with bare feets and witness a moment of grace.
         </p>
       </div>
     </section>
